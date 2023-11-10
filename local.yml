@@ -1,0 +1,159 @@
+- hosts: localhost
+
+  vars:
+    proxy_env:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+      TERM: xterm-256color
+      SHELL: /bin/bash
+
+  tasks:
+
+    - name: wersja kasnet
+      shell: mysql -N -e "select wartosc from KasyUstawienia where parametr='Wersja' order by czas desc limit 1;" kasa
+      register: ver_df_daemon
+      environment: "{{ proxy_env }}"
+
+    - name: wersja xasnet
+      shell: mysql -N -e "select wartosc from KasyUstawienia where parametr='Klient.Wersja' order by czas desc limit 1;" kasa
+      register: ver_xkasnet
+      environment: "{{ proxy_env }}"
+
+    - name: unhold paczek xkasnet'a
+      shell: |
+          sudo apt-mark unhold $(apt-mark showhold)
+      args:
+        executable: /bin/bash
+      environment: "{{ proxy_env }}"
+      ignore_errors: yes
+
+    - name:  Instalacja paczek xkasnet bionic
+      apt:
+        name:
+          - xkasnet-client-2.2.18=2.2.18r202303211027~bionic-1
+          - xkasnet-libnative-jni-2.2.18=2.2.18r202303211027~bionic-1
+        state: present
+        #state: latest
+        force: yes
+        update_cache: yes
+      when: ver_xkasnet.stdout != '2.2.18r202303211027' and ansible_distribution_version == '18.04'
+      register: upgrade_xkasnet
+      environment: "{{ proxy_env }}"
+
+    - name:  Instalacja paczek xkasnet jammy
+      apt:
+        name:
+          - xkasnet-client-2.2.18=2.2.18r202303211027~jammy-1
+          - xkasnet-libnative-jni-2.2.18=2.2.18r202303211027~jammy-1
+        state: present
+        #state: latest
+        force: yes
+        update_cache: yes
+      when: ver_xkasnet.stdout != '2.2.18r202303211027' and ansible_distribution_version == '22.04'
+      register: upgrade_xkasnet
+      environment: "{{ proxy_env }}"
+
+    # - name: Zmieniam ownera na xkasnet
+    #   file:
+    #     path: /home/xkasnet
+    #     state: directory
+    #     recurse: yes
+    #     owner: kasa
+    #     group: kasa
+    #   ignore_errors: yes
+
+    - name:  Instalacja paczek kasnet bionic
+      apt:
+        name:
+          - kasnet-libwaga-2.1.337=2.1.337r202303221358~bionic-1
+          - kasnet-server-2.1.337=2.1.337r202303221358~bionic-1
+          - kasnet-src-2.1.337=2.1.337r202303221358~bionic-1
+          - kasnet-config-2.1.337=2.1.337r202303221358~bionic-1
+          - kasnet-tools-2.1.337=2.1.337r202303221358~bionic-1
+          - kasnet-monitor-2.1.337=2.1.337r202303221358~bionic-1
+        state: present
+        force: yes
+        update_cache: yes
+      when: ver_df_daemon.stdout != '2.1.337r202303221358' and ansible_distribution_version == '18.04'
+      register: upgrade_df_daemon
+      environment: "{{ proxy_env }}"
+
+    - name:  Instalacja paczek kasnet jammy
+      apt:
+        name:
+          - kasnet-libwaga-2.1.337=2.1.337r202303221358~jammy-1
+          - kasnet-server-2.1.337=2.1.337r202303221358~jammy-1
+          - kasnet-src-2.1.337=2.1.337r202303221358~jammy-1
+          - kasnet-config-2.1.337=2.1.337r202303221358~jammy-1
+          - kasnet-tools-2.1.337=2.1.337r202303221358~jammy-1
+          - kasnet-monitor-2.1.337=2.1.337r202303221358~jammy-1
+        state: present
+        force: yes
+        update_cache: yes
+      when: ver_df_daemon.stdout != '2.1.337r202303221358' and ansible_distribution_version == '22.04'
+      register: upgrade_df_daemon
+      environment: "{{ proxy_env }}"
+
+    - name:  Instalacja vrad
+      apt:
+        name:
+          - vrad
+        state: latest
+        force: yes
+        update_cache: yes
+      environment: "{{ proxy_env }}"
+
+    - name: hosts
+      blockinfile:
+        marker: "## {mark} RAD3"
+        path: '/etc/hosts'
+        block: |
+         127.0.0.1  rad.mparagon.pl
+      no_log: true
+
+    - name: konfiguracja local
+      blockinfile:
+        backup: true
+        create: true
+        marker: "## {mark} RAD3"
+        path: '/home/xkasnet/konfiguracja/.local'
+        block: |
+         menu4.el7.index=262
+         menu4.el7.image=EC_promolist.png
+         menu10.el7.index=265
+
+         app.promotionCalculator.isActive=false
+         app.promotionCalculator.showWindowAfterAddingClientCard=true
+         app.rad3Promotion.timeout=0
+         app.rad3Promotion.isActive=false
+         app.rad3Promotion.calculateAfterEachProduct=false
+         app.rad3Promotion.diagnosticSendInterval=60
+         app.rad3Promotion.sendDiagnosticsWithRegistration=false
+         app.rad3Promotion.rp.calculateAfterEachProduct=true
+
+         app.rad3Promotion.resendRequestCount=3
+         app.rad3Promotion.rp.timeout=200
+         app.rad3Promotion.rp.resendCount=1
+         app.opt.showCustomerCardNumber=true
+      no_log: true
+      when: "'app.rad3Promotion.register' not in lookup('file', '/home/xkasnet/konfiguracja/.local')"
+
+    - name: process k
+      shell: cd /home/kasa/; bin/df_daemon -sem |grep "Kasjer zalogowany" | awk '{print $3}'
+      register: pk
+      environment: "{{ proxy_env }}"
+
+    - name: reload df
+      shell: pkill -9 df_daemon
+      args:
+        executable: /bin/bash
+      environment: "{{ proxy_env }}"
+      when: pk.stdout == 'WOLNY'
+      ignore_errors: yes
+
+    - name: reload xk
+      shell: pkill -f 'java -jar xkasnet.jar'
+      args:
+        executable: /bin/bash
+      environment: "{{ proxy_env }}"
+      when: pk.stdout == 'WOLNY'
+      ignore_errors: yes
