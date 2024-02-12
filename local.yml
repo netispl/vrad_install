@@ -38,14 +38,14 @@
     - name:  Instalacja paczek xkasnet bionic
       apt:
         name:
-          - xkasnet-client-2.2.18=2.2.18r202311161515~bionic-1
-          - xkasnet-client-ec-2.2.18=2.2.18r202311161515~bionic-1
-          - xkasnet-libnative-jni-2.2.18=2.2.18r202311161515~bionic-1
+          - xkasnet-client-2.2.18=2.2.18r202401291032~bionic-1
+          - xkasnet-client-ec-2.2.18=2.2.18r202401291032~bionic-1
+          - xkasnet-libnative-jni-2.2.18=2.2.18r202401291032~bionic-1
         state: present
         #state: latest
         force: yes
         update_cache: yes
-      when: ver_xkasnet.stdout != '2.2.18r202311161515' and ansible_distribution_version == '18.04' and '{{ POSconfig.stdout }}' != 'kasa.config-1700x1200-eceuro'
+      when: ver_xkasnet.stdout != '2.2.18r202401291032' and ansible_distribution_version == '18.04' and '{{ POSconfig.stdout }}' != 'kasa.config-1700x1200-eceuro'
       register: upgrade_xkasnet
       environment: "{{ proxy_env }}"
 
